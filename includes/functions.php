@@ -39,6 +39,7 @@ function pmpro_setDBTables() {
 	$wpdb->pmpro_discount_codes_levels = $wpdb->prefix . 'pmpro_discount_codes_levels';
 	$wpdb->pmpro_discount_codes_uses = $wpdb->prefix . 'pmpro_discount_codes_uses';
 	$wpdb->pmpro_membership_levelmeta = $wpdb->prefix . 'pmpro_membership_levelmeta';
+	$wpdb->pmpro_membership_ordermeta = $wpdb->prefix . 'pmpro_membership_ordermeta';
 }
 pmpro_setDBTables();
 
@@ -642,6 +643,25 @@ function update_pmpro_membership_level_meta( $level_id, $meta_key, $meta_value, 
 
 function delete_pmpro_membership_level_meta( $level_id, $meta_key, $meta_value = '' ) {
 	return delete_metadata( 'pmpro_membership_level', $level_id, $meta_key, $meta_value );
+}
+
+/**
+ * pmpro_membership_order Meta Functions
+ */
+function add_pmpro_membership_order_meta( $order_id, $meta_key, $meta_value, $unique = false ) {
+	return add_metadata( 'pmpro_membership_order', $order_id, $meta_key, $meta_value, $unique );
+}
+
+function get_pmpro_membership_order_meta( $order_id, $key, $single = false ) {
+	return get_metadata( 'pmpro_membership_order', $order_id, $key, $single );
+}
+
+function update_pmpro_membership_order_meta( $order_id, $meta_key, $meta_value, $prev_value = '' ) {
+	return update_metadata( 'pmpro_membership_order', $order_id, $meta_key, $meta_value, $prev_value );
+}
+
+function delete_pmpro_membership_order_meta( $order_id, $meta_key, $meta_value = '' ) {
+	return delete_metadata( 'pmpro_membership_order', $order_id, $meta_key, $meta_value );
 }
 
 function pmpro_hideAds() {
@@ -1608,9 +1628,13 @@ function pmpro_generateUsername( $firstname = '', $lastname = '', $email = '' ) 
 // get a new random code for discount codes
 function pmpro_getDiscountCode( $seed = null ) {
 	global $wpdb;
-
+	
+	// We mix this with the seed to make sure we get unique codes.
+	static $count = 0;
+	$count++;
+	
 	while ( empty( $code ) ) {
-		$scramble = md5( AUTH_KEY . current_time( 'timestamp' ) . $seed . SECURE_AUTH_KEY );
+		$scramble = md5( AUTH_KEY . microtime() . $seed . SECURE_AUTH_KEY . $count );
 		$code = substr( $scramble, 0, 10 );
 		$check = $wpdb->get_var( "SELECT code FROM $wpdb->pmpro_discount_codes WHERE code = '" . esc_sql( $code ) . "' LIMIT 1" );
 		if ( $check || is_numeric( $code ) ) {
@@ -1701,7 +1725,7 @@ function pmpro_checkDiscountCode( $code, $level_id = null, $return_errors = fals
 	 *
 	 * @param bool $okay true if code check is okay or false if there was an error
 	 * @param object $dbcode Object containing code data from the database row
-	 * @param int $level_id ID of the level the user is checking out for.
+	 * @param int|array $level_id ID of the level the user is checking out for.
 	 * @param string $code Discount code string.
 	 *
 	 * @return mixed $okay true if okay, false or error message string if not okay
@@ -2231,9 +2255,14 @@ function pmpro_getLevelAtCheckout( $level_id = null, $discount_code = null ) {
 		$discount_code_id = $wpdb->get_var( "SELECT id FROM $wpdb->pmpro_discount_codes WHERE code = '" . $discount_code . "' LIMIT 1" );
 
 		// check code
-		$code_check = pmpro_checkDiscountCode( $discount_code, $level_id, true );
+		global $pmpro_checkout_level_ids; // Set by MMPU.
+		if ( isset( $pmpro_checkout_level_ids ) ) {
+			$code_check = pmpro_checkDiscountCode( $discount_code, $pmpro_checkout_level_ids, true );
+		} else {
+			$code_check = pmpro_checkDiscountCode( $discount_code, $level_id, true );
+		}
 		if ( $code_check[0] != false ) {
-			$sqlQuery    = "SELECT l.id, cl.*, l.name, l.description, l.allow_signups FROM $wpdb->pmpro_discount_codes_levels cl LEFT JOIN $wpdb->pmpro_membership_levels l ON cl.level_id = l.id LEFT JOIN $wpdb->pmpro_discount_codes dc ON dc.id = cl.code_id WHERE dc.code = '" . $discount_code . "' AND cl.level_id = '" . $level_id . "' LIMIT 1";
+			$sqlQuery    = "SELECT l.id, cl.*, l.name, l.description, l.allow_signups, l.confirmation FROM $wpdb->pmpro_discount_codes_levels cl LEFT JOIN $wpdb->pmpro_membership_levels l ON cl.level_id = l.id LEFT JOIN $wpdb->pmpro_discount_codes dc ON dc.id = cl.code_id WHERE dc.code = '" . $discount_code . "' AND cl.level_id = '" . $level_id . "' LIMIT 1";
 			$pmpro_level = $wpdb->get_row( $sqlQuery );
 
 			// if the discount code doesn't adjust the level, let's just get the straight level
@@ -3392,4 +3421,25 @@ function pmpro_insert_or_replace( $table, $data, $format, $primary_key = 'id' ) 
 		// Replace.
 		return $wpdb->replace( $table, $data, $format );
 	}
+}
+
+/**
+ * Checks if a webhook is running
+ */
+function pmpro_doing_webhook( $gateway = null ){
+
+	if( defined( 'PMPRO_DOING_WEBHOOK' ) && !empty ( PMPRO_DOING_WEBHOOK ) ){
+		if( $gateway !== null ){
+			if( PMPRO_DOING_WEBHOOK == $gateway ){
+				return true;
+			} else {
+				return false;	
+			}
+		} else {
+			return true;
+		}
+	} else {
+		return false;
+	}
+	
 }
