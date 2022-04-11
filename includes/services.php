@@ -70,6 +70,15 @@ function pmpro_wp_ajax_orders_csv()
 add_action('wp_ajax_orders_csv', 'pmpro_wp_ajax_orders_csv');
 
 /**
+ * Handles the Sales Export
+ */
+function pmpro_wp_ajax_salesreport_csv() {
+	require_once(dirname(__FILE__) . "/../adminpages/reports-csv.php");	
+	exit;	
+}
+add_action('wp_ajax_salesreport_csv', 'pmpro_wp_ajax_salesreport_csv');
+
+/**
  * Load the Orders print view.
  *
  * @since 1.8.6
